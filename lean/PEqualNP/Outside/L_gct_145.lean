@@ -1,7 +1,7 @@
 import Mathlib
 
 theorem PEqualNP.Outside.L_gct_145 : (
-∀ m k : ℕ, 2 * k ≤ m → (∑ w ∈ Finset.range (k + 1), m.choose w) * (k ^ k * (m - k) ^ (m - k)) ≤ m ^ m) := by
+  ∀ m k : ℕ, 2 * k ≤ m → (∑ w ∈ Finset.range (k + 1), m.choose w) * (k ^ k * (m - k) ^ (m - k)) ≤ m ^ m) := by
   intro m k hk
   have hkm : k ≤ m := by omega
   have hbase : k ≤ m - k := by omega
