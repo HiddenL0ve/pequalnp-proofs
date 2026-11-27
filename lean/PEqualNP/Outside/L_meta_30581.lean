@@ -4,7 +4,10 @@ import PEqualNP.MetaComplexity.Helpers.RepInduced
 import PEqualNP.MetaComplexity.L100
 import PEqualNP.Outside.L_meta_18508
 
-namespace PEqualNP.ThreeHolesLower
+namespace PEqualNP.Outside.L_meta_30581
+
+open PEqualNP.CircuitLowerBounds PEqualNP.MetaComplexity
+open PEqualNP.Represents (oneEach Represents RepSizeAtMost)
 
 def edge (x y : Nat) : Bool :=
   (64478 : Nat).testBit (4 * min x 3 + min y 3)
@@ -76,40 +79,6 @@ theorem saved (induced : InducedBound) (n m s : Nat) (hn : 3 ≤ n) (hm : 3 ≤ 
   rw [card_low] at r c
   exact ⟨t,by simpa only [A,mem_low] using rep,by omega⟩
 
--- The floor argument is supplied by clampedCrownFloor applied to L-meta-6158.2.
-theorem exact_of_bounds (induced : InducedBound) (upper : (
-∀ (n m : Nat), 3 ≤ n → 3 ≤ m →
-  ∃ C : PEqualNP.CircuitLowerBounds.Circuit,
-    PEqualNP.MetaComplexity.Monotone2 C ∧ C.size = n + m + 1 ∧
-      PEqualNP.Represents.Represents (fun (u : Fin n) (v : Fin m) =>
-        (64478 : Nat).testBit (4 * min u.val 3 + min v.val 3)) C
-    )) (floor : ∀ (n m : Nat), 4 ≤ n → 4 ≤ m →
-      ¬Represents.RepSizeAtMost (fun (i : Fin n) (j : Fin m) =>
-        edge i.val j.val && decide (i.val < 3) && decide (j.val < 3)) 6) :
-∀ (n m : Nat), 4 ≤ n → 4 ≤ m →
-  let A := fun (u : Fin n) (v : Fin m) =>
-    (64478 : Nat).testBit (4 * min u.val 3 + min v.val 3)
-  PEqualNP.Represents.RepSizeAtMost A (n + m + 1) ∧
-    ¬ PEqualNP.Represents.RepSizeAtMost A (n + m) := by
-  intro n m hn hm
-  have hn3 : 3 ≤ n := by omega
-  have hm3 : 3 ≤ m := by omega
-  obtain ⟨C, positive, cost, semantics⟩ := upper n m hn3 hm3
-  refine ⟨⟨C, positive, cost.le, semantics⟩, ?_⟩
-  intro small
-  obtain ⟨t, ⟨D, pos, size, rep⟩, price⟩ := saved induced n m (n+m) hn3 hm3 small
-  exact floor n m hn hm ⟨D, pos, by omega, rep⟩
-
-end PEqualNP.ThreeHolesLower
-
-
-
-namespace PEqualNP.PrefixRestriction
-
-open CircuitLowerBounds
-open Represents (oneEach Represents RepSizeAtMost)
-open MetaComplexity (Monotone2)
-
 /-- Raw inputs outside the retained banks go to a wire beyond the whole new circuit.
 Gate indices keep their offset from the end of the raw inputs. -/
 private def wire (n m a b dead w : Nat) : Nat :=
@@ -119,7 +88,7 @@ private def wire (n m a b dead w : Nat) : Nat :=
 
 private def rename (r : Nat → Nat) (g : Gate) : Gate := ⟨g.op, g.inputs.map r⟩
 
-private def step (ws : List Bool) (g : Gate) : List Bool :=
+private def prefixStep (ws : List Bool) (g : Gate) : List Bool :=
   ws ++ [g.op.eval (g.inputs.map fun k => ws.getD k false)]
 
 private theorem lengthInput {a b : Nat} (u : Fin a) (v : Fin b) : (oneEach u v).length = a + b := by
@@ -175,8 +144,8 @@ private theorem simulation {n m a b N : Nat} (ha : a ≤ n) (hb : b ≤ m)
     (u : Fin a) (v : Fin b) (gs : List Gate) (tail : List Bool) (h : tail.length + gs.length ≤ N) :
     let r := wire n m a b (a + b + N)
     ∃ out : List Bool, out.length ≤ N ∧
-      (gs.map (rename r)).foldl step (oneEach u v ++ tail) = oneEach u v ++ out ∧
-      gs.foldl step (oneEach (Fin.castLE ha u) (Fin.castLE hb v) ++ tail) =
+      (gs.map (rename r)).foldl prefixStep (oneEach u v ++ tail) = oneEach u v ++ out ∧
+      gs.foldl prefixStep (oneEach (Fin.castLE ha u) (Fin.castLE hb v) ++ tail) =
         oneEach (Fin.castLE ha u) (Fin.castLE hb v) ++ out := by
   induction gs generalizing tail with
   | nil => exact ⟨tail, by simpa using h, rfl, rfl⟩
@@ -191,7 +160,7 @@ private theorem simulation {n m a b N : Nat} (ha : a ≤ n) (hb : b ≤ m)
     have bound : (tail ++ [bit]).length + rest.length ≤ N := by
       simp only [List.length_cons] at h
       simp; omega
-    simpa only [List.map_cons, List.foldl_cons, step, same, List.append_assoc, bit, old]
+    simpa only [List.map_cons, List.foldl_cons, prefixStep, same, List.append_assoc, bit, old]
       using ih (tail ++ [bit]) bound
 
 /-- Keeping an initial segment of each bank costs no gates, including for forward or missing reads. -/
@@ -211,38 +180,11 @@ theorem restrictPrefix {n m a b s : Nat} (ha : a ≤ n) (hb : b ≤ m)
       simulation (N := C.size) ha hb u v C.gates [] (by simp [Circuit.size])
     simp only [List.append_nil] at hnew hold
     have val := rep (Fin.castLE ha u) (Fin.castLE hb v)
-    change (C.gates.foldl step _).getD C.output false = _ at val
-    change ((C.gates.map (rename r)).foldl step _).getD (r C.output) false = _
+    change (C.gates.foldl prefixStep _).getD C.output false = _ at val
+    change ((C.gates.map (rename r)).foldl prefixStep _).getD (r C.output) false = _
     rw [hnew, readPrefix ha hb u v out len, ← hold, val]
 
 /-- The clamped rectangular graph restricted to four rows and columns is mask 854. -/
-theorem clampedCrownFloor {n m : Nat} (hn : 4 ≤ n) (hm : 4 ≤ m)
-    (floor : ¬ RepSizeAtMost (fun i j : Fin 4 => (854 : Nat).testBit (4 * i.val + j.val)) 6) :
-    ¬ RepSizeAtMost (fun (i : Fin n) (j : Fin m) =>
-      (64478 : Nat).testBit (4 * min i.val 3 + min j.val 3) &&
-        decide (i.val < 3) && decide (j.val < 3)) 6 := by
-  intro h
-  have small := restrictPrefix hn hm _ h
-  have cells : (fun (i j : Fin 4) =>
-      (64478 : Nat).testBit (4 * min i.val 3 + min j.val 3) &&
-        decide (i.val < 3) && decide (j.val < 3)) =
-      (fun i j : Fin 4 => (854 : Nat).testBit (4 * i.val + j.val)) := by
-    funext i j
-    exact (by decide : ∀ a b : Fin 4,
-      ((64478 : Nat).testBit (4 * min a.val 3 + min b.val 3) &&
-        decide (a.val < 3) && decide (b.val < 3)) =
-      (854 : Nat).testBit (4 * a.val + b.val)) i j
-  apply floor
-  rw [← cells]
-  exact small
-
-end PEqualNP.PrefixRestriction
-
-
-
-namespace PEqualNP.ThreeHoles
-
-open CircuitLowerBounds
 
 private def step (v : List Bool) (g : Gate) : List Bool :=
   v ++ [g.op.eval (g.inputs.map fun k => v.getD k false)]
@@ -323,7 +265,6 @@ private theorem chain_run (xs : List Bool) (last : Nat) (ws : List Nat)
       lastVal,other]
     exact Bool.or_assoc _ _ _
 
-
 private def extras (n m : Nat) : List Nat :=
   ((List.range (n-3)).map (fun t => 3+t)) ++ ((List.range (m-3)).map (fun t => n+3+t))
 
@@ -397,7 +338,7 @@ private theorem coreValue {n m : Nat} (hn : 3 ≤ n) (hm : 3 ≤ m) (i : Fin n) 
   simp (disch := decide) only [bits, List.getD_cons_succ, List.getD_cons_zero,
     left, right, right0, vote, flag]
 
-theorem _root_.PEqualNP.MetaComplexity.L29756 :
+theorem threeHoleUpper :
 ∀ (n m : Nat), 3 ≤ n → 3 ≤ m →
   ∃ C : PEqualNP.CircuitLowerBounds.Circuit,
     PEqualNP.MetaComplexity.Monotone2 C ∧ C.size = n + m + 1 ∧
@@ -441,12 +382,6 @@ theorem _root_.PEqualNP.MetaComplexity.L29756 :
       (by intro w hw; specialize short w hw; simp [bLen]; omega),past,same,
       coreValue hn hm i j,extraValue i j]
     exact graphFormula i.val j.val
-
-end PEqualNP.ThreeHoles
-
-namespace PEqualNP.MetaComplexity.SBase
-
-open PEqualNP.CircuitLowerBounds
 
 /-- The value of wire `k` on the point set `X`: input wires read membership, gate wires apply
 their operation to the wires they read (a wire not yet existing reads false), and a wire past
@@ -563,12 +498,6 @@ theorem val_mono {n : ℕ} {gs : List Gate} (hgs : ∀ g ∈ gs, g.op = .and ∨
         · simp [hak] at ha
       · rw [val_past (by omega)] at hk
         exact absurd hk (by simp)
-end PEqualNP.MetaComplexity.SBase
-
-namespace PEqualNP.ThreeLineBoundary
-
-open CircuitLowerBounds
-open MetaComplexity
 
 /-- Checked statements L-meta-100 and L-meta-18508, respectively. -/
 abbrev MajorityFloor : Prop :=
@@ -592,9 +521,9 @@ theorem crownFloor (majority : MajorityFloor) (reduceCrown : CrownReduction) :
     rcases ops g hg with e | e <;> simp [e]
   let pair : Finset (Fin 3) := {0, 1}
   have atPair := two (fun i => decide (i ∈ pair)) (by decide)
-  rw [SBase.eval_eq C.gates pair C.output] at atPair
-  have atTop := SBase.val_mono ops (Finset.subset_univ pair) C.output atPair
-  rw [← SBase.eval_eq C.gates Finset.univ C.output] at atTop
+  rw [eval_eq C.gates pair C.output] at atPair
+  have atTop := val_mono ops (Finset.subset_univ pair) C.output atPair
+  rw [← eval_eq C.gates Finset.univ C.output] at atTop
   have small : HasCircuitSize 3 (fun x : Fin 3 → Bool =>
       (x 0 && x 1) || (x 1 && x 2) || (x 0 && x 2)) 3 := by
     refine ⟨C, fan, by omega, ?_⟩
@@ -611,30 +540,24 @@ theorem crownFloor (majority : MajorityFloor) (reduceCrown : CrownReduction) :
   have := (majority 3).mp small
   omega
 
-end PEqualNP.ThreeLineBoundary
-
-namespace PEqualNP.ThreeHolesLower
-
-theorem exactFromThree (induced : InducedBound) (majority : ThreeLineBoundary.MajorityFloor)
-    (reduceCrown : ThreeLineBoundary.CrownReduction) (n m : ℕ) (hn : 3 ≤ n) (hm : 3 ≤ m) :
+theorem exactFromThree (induced : InducedBound) (majority : MajorityFloor)
+    (reduceCrown : CrownReduction) (n m : ℕ) (hn : 3 ≤ n) (hm : 3 ≤ m) :
     let A := fun (i : Fin n) (j : Fin m) => edge i.val j.val
     Represents.RepSizeAtMost A (n+m+1) ∧ ¬ Represents.RepSizeAtMost A (n+m) := by
-  obtain ⟨C, pos, price, rep⟩ := MetaComplexity.L29756 n m hn hm
+  obtain ⟨C, pos, price, rep⟩ := threeHoleUpper n m hn hm
   refine ⟨⟨C,pos,price.le,rep⟩,?_⟩
   intro small
   obtain ⟨t, ⟨D, dp, ds, dr⟩, cost⟩ := saved induced n m (n+m) hn hm small
-  have copy := PrefixRestriction.restrictPrefix hn hm _ (s := 6) ⟨D,dp,by omega,dr⟩
+  have copy := restrictPrefix hn hm _ (s := 6) ⟨D,dp,by omega,dr⟩
   have eqn : ∀ i j : Fin 3, (edge i.val j.val && decide (i.val < 3) && decide (j.val < 3)) = decide (i ≠ j) := by decide
-  apply ThreeLineBoundary.crownFloor majority reduceCrown
+  apply crownFloor majority reduceCrown
   simpa only [Fin.coe_castLE, eqn] using copy
 
-end PEqualNP.ThreeHolesLower
-
 -- This wrapper uses the target graph from the register literally.
-theorem PEqualNP.ThreeHolesLower.exactThreeLinesFromReceipts
-    (induced : PEqualNP.ThreeHolesLower.InducedBound)
-    (majority : PEqualNP.ThreeLineBoundary.MajorityFloor)
-    (reduceCrown : PEqualNP.ThreeLineBoundary.CrownReduction) :
+theorem exactThreeLinesFromReceipts
+    (induced : InducedBound)
+    (majority : MajorityFloor)
+    (reduceCrown : CrownReduction) :
 ∀ (n m : Nat), 3 ≤ n → 3 ≤ m →
   let A := fun (u : Fin n) (v : Fin m) =>
     (64478 : Nat).testBit (4 * min u.val 3 + min v.val 3)
@@ -642,7 +565,9 @@ theorem PEqualNP.ThreeHolesLower.exactThreeLinesFromReceipts
     ¬ PEqualNP.Represents.RepSizeAtMost A (n + m)
  := by
   intro n m hn hm
-  exact PEqualNP.ThreeHolesLower.exactFromThree induced majority reduceCrown n m hn hm
+  exact exactFromThree induced majority reduceCrown n m hn hm
+
+end PEqualNP.Outside.L_meta_30581
 
 theorem PEqualNP.Outside.L_meta_30581 :
   ∀ (n m : Nat), 3 ≤ n → 3 ≤ m →
@@ -650,7 +575,7 @@ theorem PEqualNP.Outside.L_meta_30581 :
       (64478 : Nat).testBit (4 * min u.val 3 + min v.val 3)
     PEqualNP.Represents.RepSizeAtMost A (n + m + 1) ∧
       ¬ PEqualNP.Represents.RepSizeAtMost A (n + m) :=
-  PEqualNP.ThreeHolesLower.exactThreeLinesFromReceipts
+  PEqualNP.Outside.L_meta_30581.exactThreeLinesFromReceipts
     PEqualNP.MetaComplexity.RepInduced.induced
     PEqualNP.MetaComplexity.L100
     PEqualNP.Outside.L_meta_18508
