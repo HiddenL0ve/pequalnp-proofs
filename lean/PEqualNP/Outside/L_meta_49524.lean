@@ -1,8 +1,6 @@
 import PEqualNP.Defs
 import PEqualNP.Outside.L_meta_25663
 
-set_option autoImplicit false
-
 theorem PEqualNP.Outside.L_meta_49524 :
 ¬ (∃ s : ℕ, 0 < s ∧
   let k := 2 * s
